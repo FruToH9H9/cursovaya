@@ -1,10 +1,9 @@
 import psutil
 from PyQt6.QtWidgets import *
-from PyQt6.QtCore import Qt, QTimer, QUrl
-from PyQt6.QtGui import QColor, QBrush, QDesktopServices
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QColor, QBrush
 import sys
 import os
-import keyboard
 
 
 class CustomTableWidget(QTableWidget):
@@ -23,24 +22,22 @@ class CustomTableWidget(QTableWidget):
         
     def kill_proccess(self):
         selected_row = self.currentRow()
-        if selected_row >= 0:
-            pid = int(self.item(selected_row, 0).text())
-            try:
-                proc = psutil.Process(pid)
-                proc.terminate()  
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-                QMessageBox.critical(self, "Ошибка", "Не удалось завершить процесс")
+        pid = int(self.item(selected_row, 0).text())
+        try:
+            proc = psutil.Process(pid)
+            proc.terminate()  
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            QMessageBox.critical(self, "Ошибка", "Не удалось завершить процесс")
     
     def open_dict(self):
         selected_row = self.currentRow()
-        if selected_row >= 0:
-            pid = int(self.item(selected_row, 0).text()) 
-            try:
-                proc = psutil.Process(pid)
-                path = proc.exe() 
-                QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.dirname(path)))  
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-                QMessageBox.critical(self, "Ошибка", "Не удалось открыть расположение файла")
+        pid = int(self.item(selected_row, 0).text()) 
+        try:
+            proc = psutil.Process(pid)
+            path = proc.exe() 
+            os.startfile(os.path.dirname(path))
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            QMessageBox.critical(self, "Ошибка", "Не удалось открыть расположение файла")
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -61,17 +58,27 @@ class MainWindow(QMainWindow):
         self.table.setColumnHidden(0, True)
         self.grid_layout.addWidget(self.table, 0, 0)
 
+        #Для нужд
         self.processes = {}
         self.prev_cpu = {}  
         self.prev_io = {} 
         self.prev_net = {}
+        self.selected_name = None
         
-        self.timer_clock = 3000
+        #таймер
+        self.timer_clock = 5000
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_table)
         self.timer.start(self.timer_clock)
 
         self.update_process_list()
+        
+    def restore_selection(self, name):
+        for row in range(self.table.rowCount()):
+            item = self.table.item(row, 1) 
+            if item and str(item.text()) == name:
+                self.table.selectRow(row)  
+                break
         
     def update_process_list(self):
         self.processes = {}
@@ -85,6 +92,12 @@ class MainWindow(QMainWindow):
                 continue
 
     def update_table(self):
+        selected_items = self.table.selectedItems()
+        if selected_items:
+            self.selected_name = str(self.table.item(selected_items[0].row(), 1).text())
+        else:
+            self.selected_name = None
+            
         info = self.info_zadachi()
         self.table.setRowCount(len(info))
         for i, row in enumerate(info):
@@ -94,10 +107,12 @@ class MainWindow(QMainWindow):
         for row in range(self.table.rowCount()):
             for col in range(self.table.columnCount()):
                 self.set_cell_color(row, col, self.table.item(row, col))
+        
+        if self.selected_name is not None:
+            self.restore_selection(self.selected_name)
                 
         self.table.resizeColumnsToContents()
         
-
     def info_zadachi(self):
         process_dict = {}  # Словарь для группировки процессов по именам
 
