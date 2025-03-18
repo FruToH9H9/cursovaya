@@ -56,6 +56,7 @@ class MainWindow(QMainWindow):
         self.table.setColumnCount(7)
         self.table.setSortingEnabled(True)
         self.table.supportedDropActions()
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setHorizontalHeaderLabels(['PID', 'Имя', 'ЦП', 'Память', 'Диск', 'Сеть', 'Энергопотребление'])
         self.table.setColumnHidden(0, True)
         self.grid_layout.addWidget(self.table, 0, 0)
@@ -65,18 +66,12 @@ class MainWindow(QMainWindow):
         self.prev_io = {} 
         self.prev_net = {}
         
-        keyboard.on_press(self.pause)
-        keyboard.wait('esc')
         self.timer_clock = 3000
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_table)
         self.timer.start(self.timer_clock)
 
         self.update_process_list()
-        
-    def pause(self, event):
-            if event.name == 'ctrl':
-                self.timer_clock = 0
         
     def update_process_list(self):
         self.processes = {}
@@ -104,11 +99,12 @@ class MainWindow(QMainWindow):
         
 
     def info_zadachi(self):
-        result = []
+        process_dict = {}  # Словарь для группировки процессов по именам
+
         for pid, proc in list(self.processes.items()):
             try:
-                pid = proc.info['pid']
                 name = proc.info['name']
+                pid = proc.info['pid']
                 memory_info = proc.memory_info().rss / 1024**2 
                 cpu_percent = proc.cpu_percent(interval=0.0)  
                 cpu_percent = cpu_percent / psutil.cpu_count(logical=True) 
@@ -124,21 +120,43 @@ class MainWindow(QMainWindow):
                 self.prev_net[pid] = (net_counters.other_bytes, net_counters.read_bytes)
                 
                 power_usage = self.estimate_power_usage(cpu_percent, net_speed, memory_info)
-                 
-                
-                row = [
-                    pid,
-                    name,
-                    f"{cpu_percent:.2f}%",  # Использование CPU в %
-                    f"{memory_info:.2f} MB",  # Использование памяти в МБ
-                    f"{disk_usage:.2f} MB/s",  # Скорость диска в МБ/с
-                    f"{net_speed:.2f} Mb/s",  # Скорость сети в мбит/c
-                    power_usage  # Использование аккумулятора в статусе
-                ]
-                result.append(row)
+
+                if name in process_dict:
+                    process_dict[name]['cpu_percent'] += cpu_percent
+                    process_dict[name]['memory_info'] += memory_info
+                    process_dict[name]['disk_usage'] += disk_usage
+                    process_dict[name]['net_speed'] += net_speed
+                    process_dict[name]['power_usage'] = self.estimate_power_usage(
+                        process_dict[name]['cpu_percent'],
+                        process_dict[name]['net_speed'],
+                        process_dict[name]['memory_info']
+                    )
+                else:
+                    # Иначе добавляем новый процесс в словарь
+                    process_dict[name] = {
+                        'cpu_percent': cpu_percent,
+                        'memory_info': memory_info,
+                        'disk_usage': disk_usage,
+                        'net_speed': net_speed,
+                        'power_usage': power_usage
+                    }
 
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 continue
+
+        # Преобразуем словарь обратно в список для отображения в таблице
+        result = []
+        for name, values in process_dict.items():
+            row = [
+                pid,
+                name,  # Имя процесса   
+                f"{values['cpu_percent']:.2f}%",  # Использование CPU в %
+                f"{values['memory_info']:.2f} MB",  # Использование памяти в МБ
+                f"{values['disk_usage']:.2f} MB/s",  # Скорость диска в МБ/с
+                f"{values['net_speed']:.2f} Mb/s",  # Скорость сети в Мбит/c
+                values['power_usage']  # Использование аккумулятора в статусе
+            ]
+            result.append(row)
 
         return result
 
