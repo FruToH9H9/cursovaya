@@ -16,7 +16,10 @@ class dispetcher_logic():
                 name = proc.info['name'] #имя процесса
                 pid = proc.info['pid'] #айди процесса
                 memory_info = proc.memory_info().rss / 1024**2  #память
-                cpu_percent = proc.cpu_percent(interval=0.0)  #ЦП
+                
+                #ЦП
+                cpu_percent = proc.cpu_percent(interval=0.0)/psutil.cpu_count()
+                #сделал ср арифметическое между двумя процессами тк большой интервал, должно чуть чуть улучшить результат
                 
                 #диск
                 """Логика диска заключена в том, что выдается разница между двумя вычислениями, если выдавать просто значение в данный
@@ -89,9 +92,9 @@ class dispetcher_logic():
         
     def paint(self, value: int, compare_to: int, item: str, sign: str):
         value = float(value.replace(sign, ''))
-        if value > compare_to:
+        if compare_to < value < compare_to*4:
             return item.setBackground(QBrush(QColor('light green')))
-        elif value > compare_to*4:  
+        elif compare_to*4 < value < compare_to*16:  
             return item.setBackground(QBrush(QColor('yellow')))
         elif value > compare_to*16:  
             return item.setBackground(QBrush(QColor('red')))
