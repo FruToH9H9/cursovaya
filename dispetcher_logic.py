@@ -15,18 +15,23 @@ class dispetcher_logic():
                 
                 name = proc.info['name'] #имя процесса
                 pid = proc.info['pid'] #айди процесса
-                memory_info = proc.memory_info().rss / 1024**2  #память
+                try:
+                    memory_info = proc.memory_info().rss / 1024**2  #память
+                except:
+                    memory_info = 0
                 
                 #ЦП
-                cpu_percent = proc.cpu_percent(interval=0.0)/psutil.cpu_count()
+                try:
+                    cpu_percent = proc.cpu_percent(interval=0.0)
+                except:
+                    cpu_percent = 0
                 #сделал ср арифметическое между двумя процессами тк большой интервал, должно чуть чуть улучшить результат
                 
                 #диск
                 """Логика диска заключена в том, что выдается разница между двумя вычислениями, если выдавать просто значение в данный
                 момент, то будет слишком огромное значение"""
                 io_counters = proc.io_counters()
-                prev_read = self.prev_io.get(pid, io_counters.read_bytes) #получаем предыдущее значение чтения по айди процесса
-                prev_write = self.prev_io.get(pid, io_counters.write_bytes) #записи
+                prev_read, prev_write = self.prev_io.get(pid, (io_counters.read_bytes, io_counters.write_bytes))
                 self.prev_io[pid] = (io_counters.read_bytes, io_counters.write_bytes) #сохраняем текущие
                 disk_usage = ((io_counters.read_bytes - prev_read) + (io_counters.write_bytes-prev_write)) / 1024**2  # МБ/с
                 
@@ -39,34 +44,34 @@ class dispetcher_logic():
                 #энергопотребление
                 power_usage = self.estimate_power_usage(cpu_percent, net_speed, memory_info)
 
-                if name in process_dict:
-                    process_dict[name]['cpu_percent'] += cpu_percent
-                    process_dict[name]['memory_info'] += memory_info
-                    process_dict[name]['disk_usage'] += disk_usage
-                    process_dict[name]['net_speed'] += net_speed
-                    process_dict[name]['power_usage'] = self.estimate_power_usage(
-                        process_dict[name]['cpu_percent'],
-                        process_dict[name]['net_speed'],
-                        process_dict[name]['memory_info']
-                    )
-                else:
-                    # Иначе добавляем новый процесс в словарь
-                    process_dict[name] = {
-                        'cpu_percent': cpu_percent,
-                        'memory_info': memory_info,
-                        'disk_usage': disk_usage,
-                        'net_speed': net_speed,
-                        'power_usage': power_usage
-                    }
+#                if pid in process_dict:
+#                    process_dict[name]['name'] = name
+#                    process_dict[name]['cpu_percent'] += cpu_percent
+#                    process_dict[name]['memory_info'] += memory_info
+#                    process_dict[name]['disk_usage'] += disk_usage
+#                    process_dict[name]['net_speed'] += net_speed
+#                    process_dict[name]['power_usage'] = self.estimate_power_usage(
+#                        process_dict[name]['cpu_percent'],
+#                        process_dict[name]['net_speed'],
+#                        process_dict[name]['memory_info']
+#                    )
+                process_dict[pid] = {
+                    'name': name,
+                    'cpu_percent': cpu_percent,
+                    'memory_info': memory_info,
+                    'disk_usage': disk_usage,
+                    'net_speed': net_speed,
+                    'power_usage': power_usage
+                }
 
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 continue
 
         result = []
-        for name, values in process_dict.items():
+        for pid, values in process_dict.items():
             row = [
                 pid,
-                name,  # Имя процесса   
+                values['name'],  # Имя процесса   
                 f"{values['cpu_percent']:.2f}%",  # Использование CPU в %
                 f"{values['memory_info']:.2f} MB",  # Использование памяти в МБ
                 f"{values['disk_usage']:.2f} MB/s",  # Скорость диска в МБ/с
@@ -77,7 +82,7 @@ class dispetcher_logic():
 
         return result
     
-    def estimate_power_usage(self, cpu, network, memory):
+    def estimate_power_usage(self, cpu: float, network: float, memory: float) -> str:
         power_score = (cpu * 0.7) + (network * 0.1) + (memory * 0.1)
         if power_score < 10:
             return "Очень низкое"
@@ -90,11 +95,11 @@ class dispetcher_logic():
         else:
             return "Очень высокое"
         
-    def paint(self, value: int, compare_to: int, item: str, sign: str):
-        value = float(value.replace(sign, ''))
-        if compare_to < value < compare_to*4:
-            return item.setBackground(QBrush(QColor('light green')))
-        elif compare_to*4 < value < compare_to*16:  
-            return item.setBackground(QBrush(QColor('yellow')))
-        elif value > compare_to*16:  
-            return item.setBackground(QBrush(QColor('red')))
+    def paint(self, data: dict) -> None:
+        value = float(data['value'].replace(data['sign'], ''))
+        if data['compare_to'] < value < data['compare_to']*4:
+            return data['item'].setBackground(QBrush(QColor('light green')))
+        elif data['compare_to']*4 < value < data['compare_to']*16:  
+            return data['item'].setBackground(QBrush(QColor('yellow')))
+        elif value > data['compare_to']*16:  
+            return data['item'].setBackground(QBrush(QColor('red')))

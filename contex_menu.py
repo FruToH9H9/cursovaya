@@ -21,7 +21,8 @@ class CustomTableWidget(QTableWidget):
         pid = int(self.item(selected_row, 0).text())
         try:
             proc = psutil.Process(pid)
-            proc.terminate()  
+            proc.terminate()
+            proc.wait()
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             QMessageBox.critical(self, "Ошибка", "Не удалось завершить процесс")
     
