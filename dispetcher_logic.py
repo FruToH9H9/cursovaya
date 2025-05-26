@@ -22,7 +22,7 @@ class dispetcher_logic():
                 
                 #ЦП
                 try:
-                    cpu_percent = proc.cpu_percent(interval=0.0)
+                    cpu_percent = proc.cpu_percent(interval=0.0)/psutil.cpu_count(logical=False)
                 except:
                     cpu_percent = 0
                 #сделал ср арифметическое между двумя процессами тк большой интервал, должно чуть чуть улучшить результат
